@@ -10,6 +10,9 @@ A modern, animated, turnkey Lovelace card and package for **Midea E1 Dishwashers
 
 ---
 
+<img width="521" height="138" alt="image" src="https://github.com/user-attachments/assets/aa2e1f19-5490-4701-a13f-c864874687ae" />
+
+
 ## ✨ Features
 
 - 🌊 **Animated Water Wave & Vibration:**
