@@ -10,7 +10,12 @@ A modern, animated, turnkey Lovelace card and package for **Midea E1 Dishwashers
 
 ---
 
-<img width="521" height="138" alt="image" src="https://github.com/user-attachments/assets/aa2e1f19-5490-4701-a13f-c864874687ae" />
+<img width="521" height="138" alt="image" src="https://github.com/user-attachments/assets/aa2e1f19-5490-4701-a13f-c864874687ae" /><img width="535" height="151" alt="image" src="https://github.com/user-attachments/assets/4810189d-2cb6-4ddf-88ad-7a257462d226" />
+<img width="531" height="145" alt="image" src="https://github.com/user-attachments/assets/63e6226f-b149-4102-bca9-0fe983e4580e" />
+<img width="549" height="808" alt="image" src="https://github.com/user-attachments/assets/a925d2c1-3b57-46b6-acf2-c8d3313bd46a" /><img width="558" height="800" alt="image" src="https://github.com/user-attachments/assets/cd415dd2-35f2-4f24-9d49-ebb443759dcb" /><img width="553" height="805" alt="image" src="https://github.com/user-attachments/assets/a3ff7029-c7e5-4560-8907-5b5ec05bbaeb" />
+
+
+
 
 
 ## ✨ Features
