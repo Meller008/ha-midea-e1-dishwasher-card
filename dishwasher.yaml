@@ -1,0 +1,242 @@
+input_select:
+  dishwasher_mode:
+    name: Режим мойки
+    icon: mdi:dishwasher
+    options:
+      - "Eco режим (3:40)"
+      - "Auto режим (2:30)"
+      - "Интенсивный режим (2:58)"
+      - "90 минут (1:30)"
+      - "Быстрая (0:30)"
+      - "Ночной режим (4:30)"
+      - "Стекло (2:00)"
+
+input_number:
+  dishwasher_delay_hours:
+    name: Отсрочка старта
+    icon: mdi:timer-sand
+    min: 0
+    max: 24
+    step: 1
+    unit_of_measurement: "ч"
+  dishwasher_cycle_total_time:
+    name: Общее время текущего цикла мойки
+    min: 0
+    max: 360
+    step: 1
+    unit_of_measurement: "мин"
+  dishwasher_delay_total_minutes:
+    name: Общее время отсрочки (мин)
+    min: 0
+    max: 1440
+    step: 1
+    unit_of_measurement: "мин"
+
+input_boolean:
+  dishwasher_auto_door:
+    name: Автооткрывание двери после мойки
+    icon: mdi:door-open
+
+script:
+  dishwasher_pause_resume:
+    alias: "Посудомойка: Пауза / Возобновить"
+    sequence:
+      - if:
+          - condition: state
+            entity_id: sensor.YOUR_DEVICE_ID_operator
+            state: "pause"
+        then:
+          - service: button.press
+            target:
+              entity_id: button.YOUR_DEVICE_ID_resume
+        else:
+          - service: button.press
+            target:
+              entity_id: button.YOUR_DEVICE_ID_pause
+
+  dishwasher_start_selected:
+    alias: "Посудомойка: Запуск выбранного режима"
+    sequence:
+      - if:
+          - condition: state
+            entity_id: binary_sensor.YOUR_DEVICE_ID_door
+            state: "on"
+        then:
+          - service: persistent_notification.create
+            data:
+              title: "Посудомойка Midea"
+              message: "⚠️ Дверца посудомойки открыта! Пожалуйста, плотно закройте дверцу перед запуском программы."
+              notification_id: "dishwasher_door_open"
+          - stop: "Дверца посудомойки открыта"
+      - if:
+          - condition: state
+            entity_id: sensor.YOUR_DEVICE_ID_operator
+            state: "pause"
+        then:
+          - service: script.dishwasher_pause_resume
+          - stop: "Мойка возобновлена после паузы"
+      - variables:
+          mode: "{{ states('input_select.dishwasher_mode') }}"
+          mode_bytes:
+            "Auto режим (2:30)": "01"
+            "Интенсивный режим (2:58)": "02"
+            "Eco режим (3:40)": "04"
+            "Стекло (2:00)": "05"
+            "90 минут (1:30)": "06"
+            "Быстрая (0:30)": "07"
+            "Ночной режим (4:30)": "0D"
+          mode_hex: "{{ mode_bytes.get(mode, '04') }}"
+          # 01 = Enable, 02 = Explicit Disable (00 means "no change", so 02 is required to turn off!)
+          auto_door: "{{ '01' if is_state('input_boolean.dishwasher_auto_door', 'on') else '02' }}"
+          # Exact 38-byte work frame: 08 03 [mode] [00*10] [auto_door] [00*24] (length 76 hex chars)
+          cmd: "{{ '0803' ~ mode_hex ~ '00000000000000000000' ~ auto_door ~ '000000000000000000000000000000000000000000000000' }}"
+      - service: midea_ac_lan.send_command
+        data:
+          device_id: YOUR_DEVICE_ID
+          cmd_type: 2
+          cmd_body: "{{ cmd }}"
+
+  dishwasher_start_delayed:
+    alias: "Посудомойка: Запуск с отсрочкой"
+    sequence:
+      - if:
+          - condition: or
+            conditions:
+              - condition: state
+                entity_id: sensor.YOUR_DEVICE_ID_status
+                state: "running"
+              - condition: state
+                entity_id: sensor.YOUR_DEVICE_ID_operator
+                state: "pause"
+        then:
+          - service: persistent_notification.create
+            data:
+              title: "Посудомойка Midea"
+              message: "⚠️ Мойка уже запущена! Нельзя установить отсрочку во время активной программы или паузы."
+              notification_id: "dishwasher_already_running"
+          - stop: "Мойка уже запущена"
+      - if:
+          - condition: state
+            entity_id: binary_sensor.YOUR_DEVICE_ID_door
+            state: "on"
+        then:
+          - service: persistent_notification.create
+            data:
+              title: "Посудомойка Midea"
+              message: "⚠️ Дверца посудомойки открыта! Пожалуйста, плотно закройте дверцу перед запуском отсрочки."
+              notification_id: "dishwasher_door_open"
+          - stop: "Дверца посудомойки открыта"
+      - variables:
+          hours: "{{ states('input_number.dishwasher_delay_hours') | int(0) }}"
+          mode: "{{ states('input_select.dishwasher_mode') }}"
+          mode_bytes:
+            "Auto режим (2:30)": "01"
+            "Интенсивный режим (2:58)": "02"
+            "Eco режим (3:40)": "04"
+            "Стекло (2:00)": "05"
+            "90 минут (1:30)": "06"
+            "Быстрая (0:30)": "07"
+            "Ночной режим (4:30)": "0D"
+          mode_hex: "{{ mode_bytes.get(mode, '04') }}"
+          # 01 = Enable, 02 = Explicit Disable
+          auto_door: "{{ '01' if is_state('input_boolean.dishwasher_auto_door', 'on') else '02' }}"
+          hours_hex: "{{ '%02X' % hours }}"
+          # Exact 38-byte order frame: 08 02 [mode] [00*4] [hours] [00*5] [auto_door] [00*24] (length 76 hex chars)
+          cmd: "{{ '0802' ~ mode_hex ~ '00000000' ~ hours_hex ~ '0000000000' ~ auto_door ~ '000000000000000000000000000000000000000000000000' }}"
+      - if:
+          - condition: template
+            value_template: "{{ hours == 0 }}"
+        then:
+          - service: script.dishwasher_start_selected
+        else:
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.dishwasher_delay_total_minutes
+            data:
+              value: "{{ hours * 60 }}"
+          - service: midea_ac_lan.send_command
+            data:
+              device_id: YOUR_DEVICE_ID
+              cmd_type: 2
+              cmd_body: "{{ cmd }}"
+
+automation:
+  - id: dishwasher_capture_delay_total_time
+    alias: "Посудомойка: Захват длительности отсрочки при установке"
+    trigger:
+      - platform: state
+        entity_id: sensor.YOUR_DEVICE_ID_status
+        to:
+          - "order"
+          - "delay"
+      - platform: state
+        entity_id: sensor.YOUR_DEVICE_ID_delay_remaining
+    condition:
+      - condition: template
+        value_template: >
+          {{ states('sensor.YOUR_DEVICE_ID_status') in ['order', 'delay']
+             and states('sensor.YOUR_DEVICE_ID_delay_remaining') | int(0) > states('input_number.dishwasher_delay_total_minutes') | int(0) }}
+    action:
+      - variables:
+          rem_min: "{{ states('sensor.YOUR_DEVICE_ID_delay_remaining') | int(0) }}"
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.dishwasher_delay_total_minutes
+        data:
+          value: "{{ rem_min }}"
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.dishwasher_delay_hours
+        data:
+          value: "{{ (rem_min / 60) | round(0) }}"
+
+  - id: dishwasher_reset_delay_total_time
+    alias: "Посудомойка: Сброс длительности отсрочки"
+    trigger:
+      - platform: state
+        entity_id: sensor.YOUR_DEVICE_ID_status
+        from:
+          - "order"
+          - "delay"
+    action:
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.dishwasher_delay_total_minutes
+        data:
+          value: 0
+
+  - id: dishwasher_capture_cycle_total_time
+    alias: "Посудомойка: Захват общей длительности цикла при старте"
+    trigger:
+      - platform: state
+        entity_id: sensor.YOUR_DEVICE_ID_status
+        to: "running"
+      - platform: state
+        entity_id: sensor.YOUR_DEVICE_ID_operator
+        to: "start"
+    condition:
+      - condition: template
+        value_template: "{{ states('input_number.dishwasher_cycle_total_time') | int(0) == 0 }}"
+    action:
+      - delay: 2
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.dishwasher_cycle_total_time
+        data:
+          value: "{{ states('sensor.YOUR_DEVICE_ID_time_remaining') | int(150) }}"
+
+  - id: dishwasher_reset_cycle_total_time
+    alias: "Посудомойка: Сброс общей длительности цикла при окончании"
+    trigger:
+      - platform: state
+        entity_id: sensor.YOUR_DEVICE_ID_status
+        to:
+          - "cancel"
+          - "power_off"
+          - "complete"
+    action:
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.dishwasher_cycle_total_time
+        data:
+          value: 0
